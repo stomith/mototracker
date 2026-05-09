@@ -1,0 +1,6 @@
+name = "mototracker-worker"
+main = "index.js"
+compatibility_date = "2026-05-09"
+
+[vars]
+ALLOWED_ORIGIN = "https://stomith.github.io"
