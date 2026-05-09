@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="MotoTracker" />
+  <title>MotoTracker</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── HOME SCREEN ── -->
+  <section id="screen-home" class="screen active">
+    <header class="app-header">
+      <h1>MotoTracker</h1>
+    </header>
+
+    <button id="btn-start-ride" class="btn-primary btn-hero" aria-label="Start a new ride">
+      Start Ride
+    </button>
+
+    <div id="ride-list-container">
+      <h2 class="section-title">Past Rides</h2>
+      <ul id="ride-list" aria-label="Past rides" role="list">
+        <!-- populated by app.js -->
+      </ul>
+      <p id="ride-list-empty" class="empty-state" hidden>No rides yet. Hit the road!</p>
+    </div>
+  </section>
+
+  <!-- ── ACTIVE RIDE SCREEN ── -->
+  <section id="screen-active" class="screen" aria-live="polite">
+    <div id="map-active" class="map-container" aria-label="Live ride map" role="img"></div>
+
+    <div class="hud">
+      <div class="hud-stat">
+        <span id="hud-speed" class="hud-value">0</span>
+        <span class="hud-label">mph</span>
+      </div>
+      <div class="hud-stat">
+        <span id="hud-elapsed" class="hud-value">00:00</span>
+        <span class="hud-label">elapsed</span>
+      </div>
+      <div class="hud-stat">
+        <span id="hud-distance" class="hud-value">0.0</span>
+        <span class="hud-label">mi</span>
+      </div>
+    </div>
+
+    <button id="btn-end-ride" class="btn-danger btn-hero" aria-label="End current ride">
+      End Ride
+    </button>
+  </section>
+
+  <!-- ── RIDE DETAIL SCREEN ── -->
+  <section id="screen-detail" class="screen">
+    <header class="detail-header">
+      <button id="btn-back" class="btn-back" aria-label="Back to home">&#8592; Back</button>
+      <h2 id="detail-title" class="detail-title"></h2>
+    </header>
+
+    <div id="map-detail" class="map-container" aria-label="Ride route map" role="img"></div>
+
+    <dl class="stats-grid">
+      <div class="stat-card">
+        <dt class="stat-label">Distance</dt>
+        <dd id="stat-distance" class="stat-value">—</dd>
+      </div>
+      <div class="stat-card">
+        <dt class="stat-label">Duration</dt>
+        <dd id="stat-duration" class="stat-value">—</dd>
+      </div>
+      <div class="stat-card">
+        <dt class="stat-label">Top Speed</dt>
+        <dd id="stat-top-speed" class="stat-value">—</dd>
+      </div>
+      <div class="stat-card">
+        <dt class="stat-label">Avg Speed</dt>
+        <dd id="stat-avg-speed" class="stat-value">—</dd>
+      </div>
+    </dl>
+
+    <button id="btn-delete-ride" class="btn-danger btn-full" aria-label="Delete this ride">
+      Delete Ride
+    </button>
+  </section>
+
+  <!-- ── GPS / permission error toast ── -->
+  <div id="toast" class="toast" role="alert" aria-live="assertive" hidden></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
