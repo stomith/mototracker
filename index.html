@@ -15,59 +15,27 @@
 </head>
 <body>
 
-  <!-- ── HOME SCREEN ── -->
-  <section id="screen-home" class="screen active">
-    <header class="app-header">
-      <h1>MotoTracker</h1>
-    </header>
+  <!-- ── PERSISTENT MAP ── -->
+  <div id="map" aria-label="Map" role="img"></div>
 
+  <!-- ── HOME OVERLAY ── -->
+  <div id="overlay-home" class="overlay">
+    <div class="overlay-title">MotoTracker</div>
     <button id="btn-start-ride" class="btn-primary btn-hero" aria-label="Start a new ride">
       Start Ride
     </button>
-
-    <div id="ride-list-container">
-      <h2 class="section-title">Past Rides</h2>
-      <ul id="ride-list" aria-label="Past rides" role="list">
-        <!-- populated by app.js -->
-      </ul>
-      <p id="ride-list-empty" class="empty-state" hidden>No rides yet. Hit the road!</p>
-    </div>
-  </section>
-
-  <!-- ── ACTIVE RIDE SCREEN ── -->
-  <section id="screen-active" class="screen" aria-live="polite">
-    <div class="map-wrapper">
-      <div id="map-active" class="map-container" aria-label="Live ride map" role="img"></div>
-      <button id="btn-recenter" class="btn-recenter" aria-label="Re-center map on my location">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="22" height="22">
-          <circle cx="12" cy="12" r="3" fill="currentColor"/>
-          <circle cx="12" cy="12" r="8"/>
-          <line x1="12" y1="2" x2="12" y2="5"/>
-          <line x1="12" y1="19" x2="12" y2="22"/>
-          <line x1="2" y1="12" x2="5" y2="12"/>
-          <line x1="19" y1="12" x2="22" y2="12"/>
-        </svg>
+    <div class="home-secondary">
+      <button id="btn-open-search" class="btn-secondary btn-secondary-action" aria-label="Search for places">
+        Search
       </button>
-      <button id="btn-search-open" class="btn-map-action btn-search-open" aria-label="Search for places">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
-          <circle cx="11" cy="11" r="8"/>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
+      <button id="btn-open-past-rides" class="btn-secondary btn-secondary-action" aria-label="View past rides">
+        Past Rides
       </button>
     </div>
-
-  <!-- ── SEARCH DRAWER ── -->
-  <div id="search-drawer" class="search-drawer" aria-hidden="true">
-    <div class="search-drawer-handle"></div>
-    <div class="search-input-row">
-      <input id="search-input" class="search-input" type="search" placeholder="Search places nearby…" autocomplete="off" enterkeyhint="search" />
-      <button id="btn-search-submit" class="btn-search-submit" aria-label="Submit search">Go</button>
-      <button id="btn-search-close" class="btn-search-close" aria-label="Close search">✕</button>
-    </div>
-    <ul id="search-results" class="search-results" role="list"></ul>
-    <p id="search-empty" class="search-empty" hidden></p>
   </div>
 
+  <!-- ── ACTIVE RIDE OVERLAY ── -->
+  <div id="overlay-active" class="overlay" hidden>
     <div class="hud">
       <div class="hud-stat">
         <span id="hud-speed" class="hud-value">0</span>
@@ -82,7 +50,6 @@
         <span class="hud-label">mi</span>
       </div>
     </div>
-
     <div class="ride-actions">
       <button id="btn-pause-ride" class="btn-secondary btn-action" aria-label="Pause current ride">
         Pause
@@ -91,17 +58,58 @@
         End Ride
       </button>
     </div>
-  </section>
+  </div>
 
-  <!-- ── RIDE DETAIL SCREEN ── -->
-  <section id="screen-detail" class="screen">
+  <!-- ── MAP BUTTONS (recenter + search, always on top of map) ── -->
+  <div id="map-buttons" class="map-buttons">
+    <button id="btn-search-open" class="btn-map-action" aria-label="Search for places">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+    </button>
+    <button id="btn-recenter" class="btn-map-action" aria-label="Re-center map on my location">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="22" height="22">
+        <circle cx="12" cy="12" r="3" fill="currentColor"/>
+        <circle cx="12" cy="12" r="8"/>
+        <line x1="12" y1="2" x2="12" y2="5"/>
+        <line x1="12" y1="19" x2="12" y2="22"/>
+        <line x1="2" y1="12" x2="5" y2="12"/>
+        <line x1="19" y1="12" x2="22" y2="12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- ── PAST RIDES DRAWER ── -->
+  <div id="drawer-past-rides" class="drawer" aria-hidden="true">
+    <div class="drawer-handle"></div>
+    <div class="drawer-header">
+      <h2 class="drawer-title">Past Rides</h2>
+      <button id="btn-close-past-rides" class="btn-drawer-close" aria-label="Close past rides">✕</button>
+    </div>
+    <ul id="ride-list" class="ride-list" aria-label="Past rides" role="list"></ul>
+    <p id="ride-list-empty" class="empty-state" hidden>No rides yet. Hit the road!</p>
+  </div>
+
+  <!-- ── SEARCH DRAWER ── -->
+  <div id="search-drawer" class="drawer" aria-hidden="true">
+    <div class="drawer-handle"></div>
+    <div class="search-input-row">
+      <input id="search-input" class="search-input" type="search" placeholder="Search places nearby…" autocomplete="off" enterkeyhint="search" />
+      <button id="btn-search-submit" class="btn-search-submit" aria-label="Submit search">Go</button>
+      <button id="btn-search-close" class="btn-drawer-close" aria-label="Close search">✕</button>
+    </div>
+    <ul id="search-results" class="search-results" role="list"></ul>
+    <p id="search-empty" class="search-empty" hidden></p>
+  </div>
+
+  <!-- ── RIDE DETAIL (full-screen overlay) ── -->
+  <section id="screen-detail" class="screen" hidden>
     <header class="detail-header">
       <button id="btn-back" class="btn-back" aria-label="Back to home">&#8592; Back</button>
       <h2 id="detail-title" class="detail-title"></h2>
     </header>
-
-    <div id="map-detail" class="map-container" aria-label="Ride route map" role="img"></div>
-
+    <div id="map-detail" class="map-detail" aria-label="Ride route map" role="img"></div>
     <dl class="stats-grid">
       <div class="stat-card">
         <dt class="stat-label">Distance</dt>
@@ -120,13 +128,15 @@
         <dd id="stat-avg-speed" class="stat-value">—</dd>
       </div>
     </dl>
-
     <button id="btn-delete-ride" class="btn-danger btn-full" aria-label="Delete this ride">
       Delete Ride
     </button>
   </section>
 
-  <!-- ── GPS / permission error toast ── -->
+  <!-- ── DRAWER BACKDROP ── -->
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+
+  <!-- ── TOAST ── -->
   <div id="toast" class="toast" role="alert" aria-live="assertive" hidden></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

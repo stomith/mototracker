@@ -11,11 +11,12 @@ const STORE_NAME  = 'rides';
 
 /* ─── State ──────────────────────────────────────────────────────────────── */
 
-let db           = null;
-let activeRide   = null;  // { id, startTime, coordinates, map, polyline, watchId, timerInterval, wakeLock }
+let db          = null;
+let map         = null;   // single persistent Leaflet map
+let activeRide  = null;   // { id, startTime, coordinates, polyline, watchId, timerInterval, wakeLock, paused, pausedMs, pauseStart }
+let searchPin   = null;
+let detailMap   = null;
 let detailRideId = null;
-let detailMap    = null;
-let searchPin    = null;  // Leaflet marker for search result
 
 /* ─── IndexedDB ──────────────────────────────────────────────────────────── */
 
@@ -67,13 +68,6 @@ function dbDelete(id) {
   });
 }
 
-/* ─── Screen routing ─────────────────────────────────────────────────────── */
-
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-}
-
 /* ─── Toast ──────────────────────────────────────────────────────────────── */
 
 let toastTimer = null;
@@ -89,7 +83,7 @@ function showToast(msg, duration = 3500) {
   }, duration);
 }
 
-/* ─── Utility: formatting ────────────────────────────────────────────────── */
+/* ─── Formatting ─────────────────────────────────────────────────────────── */
 
 function fmtElapsed(ms) {
   const totalSec = Math.floor(ms / 1000);
@@ -107,10 +101,10 @@ function fmtDate(ts) {
   });
 }
 
-function mpsToMph(mps) { return mps * 2.23694; }
-function metersToMiles(m) { return m * 0.000621371; }
+function mpsToMph(mps)      { return mps * 2.23694; }
+function metersToMiles(m)   { return m * 0.000621371; }
 
-/* ─── Utility: geo ───────────────────────────────────────────────────────── */
+/* ─── Geo ────────────────────────────────────────────────────────────────── */
 
 function haversine(a, b) {
   const R  = 6371000;
@@ -138,81 +132,116 @@ function computeStats(ride) {
   return { distance: metersToMiles(distM), duration, topSpeed: topMph, avgSpeed: avgMph };
 }
 
-/* ─── Leaflet helpers ────────────────────────────────────────────────────── */
+/* ─── Map init ───────────────────────────────────────────────────────────── */
 
-function makeTileLayer() {
-  return L.tileLayer(TILE_URL, { attribution: TILE_ATTR, maxZoom: 19 });
+function initMap() {
+  map = L.map('map', { zoomControl: false, attributionControl: true }).setView([37.7749, -122.4194], 12);
+  L.tileLayer(TILE_URL, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(map);
+
+  // Try to center on user's location immediately
+  navigator.geolocation.getCurrentPosition(
+    pos => map.setView([pos.coords.latitude, pos.coords.longitude], 14),
+    () => { /* stay on default */ },
+    { enableHighAccuracy: false, timeout: 5000 }
+  );
 }
 
-function makeMap(containerId, center, zoom) {
-  const map = L.map(containerId, { zoomControl: false, attributionControl: true }).setView(center, zoom);
-  makeTileLayer().addTo(map);
-  // Invalidate size after the screen becomes visible so tiles render correctly
-  setTimeout(() => map.invalidateSize(), 50);
-  return map;
+/* ─── UI state ───────────────────────────────────────────────────────────── */
+
+function showHomeUI() {
+  document.getElementById('overlay-home').hidden   = false;
+  document.getElementById('overlay-active').hidden = true;
+  document.getElementById('map-buttons').classList.remove('ride-active');
 }
 
-/* ─── Home screen ────────────────────────────────────────────────────────── */
+function showActiveUI() {
+  document.getElementById('overlay-home').hidden   = true;
+  document.getElementById('overlay-active').hidden = false;
+  document.getElementById('map-buttons').classList.add('ride-active');
+}
 
-async function renderHome() {
-  showScreen('screen-home');
+/* ─── Drawers ────────────────────────────────────────────────────────────── */
+
+function openDrawer(id) {
+  closeAllDrawers();
+  document.getElementById(id).classList.add('open');
+  document.getElementById(id).setAttribute('aria-hidden', 'false');
+  const backdrop = document.getElementById('drawer-backdrop');
+  backdrop.hidden = false;
+  backdrop.onclick = closeAllDrawers;
+}
+
+function closeAllDrawers() {
+  document.querySelectorAll('.drawer').forEach(d => {
+    d.classList.remove('open');
+    d.setAttribute('aria-hidden', 'true');
+  });
+  document.getElementById('drawer-backdrop').hidden = true;
+}
+
+/* ─── Past rides drawer ──────────────────────────────────────────────────── */
+
+async function openPastRides() {
   const rides = await dbGetAll();
   const list  = document.getElementById('ride-list');
   const empty = document.getElementById('ride-list-empty');
   list.innerHTML = '';
 
-  if (rides.length === 0) { empty.hidden = false; return; }
-  empty.hidden = true;
+  if (rides.length === 0) {
+    empty.hidden = false;
+  } else {
+    empty.hidden = true;
+    rides.forEach(ride => {
+      const li    = document.createElement('li');
+      li.className = 'ride-item';
+      li.setAttribute('role', 'button');
+      li.setAttribute('tabindex', '0');
+      const stats = ride.stats ?? computeStats(ride);
+      li.innerHTML = `
+        <span class="ride-date">${fmtDate(ride.startTime)}</span>
+        <span class="ride-meta">${stats.distance.toFixed(1)} mi · ${fmtElapsed(stats.duration)}</span>
+      `;
+      li.addEventListener('click', () => { closeAllDrawers(); openDetail(ride.id); });
+      li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { closeAllDrawers(); openDetail(ride.id); } });
+      list.appendChild(li);
+    });
+  }
 
-  rides.forEach(ride => {
-    const li = document.createElement('li');
-    li.className = 'ride-item';
-    li.setAttribute('role', 'button');
-    li.setAttribute('tabindex', '0');
-    li.setAttribute('aria-label', `Ride on ${fmtDate(ride.startTime)}`);
-    const stats = ride.stats ?? computeStats(ride);
-    li.innerHTML = `
-      <span class="ride-date">${fmtDate(ride.startTime)}</span>
-      <span class="ride-meta">${stats.distance.toFixed(1)} mi · ${fmtElapsed(stats.duration)}</span>
-    `;
-    li.addEventListener('click', () => openDetail(ride.id));
-    li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openDetail(ride.id); });
-    list.appendChild(li);
-  });
+  openDrawer('drawer-past-rides');
 }
 
 /* ─── Active ride ────────────────────────────────────────────────────────── */
 
+function activeElapsed() {
+  return (Date.now() - activeRide.startTime) - activeRide.pausedMs;
+}
+
 async function startRide() {
   if (activeRide) return;
-
-  showScreen('screen-active');
 
   let wakeLock = null;
   try {
     if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
   } catch { /* non-fatal */ }
 
-  const map      = makeMap('map-active', [0, 0], 15);
   const polyline = L.polyline([], { color: TRACK_COLOR, weight: TRACK_WIDTH }).addTo(map);
 
   activeRide = {
-    id: Date.now(),
+    id:        Date.now(),
     startTime: Date.now(),
     coordinates: [],
-    map,
     polyline,
-    watchId: null,
+    watchId:      null,
     timerInterval: null,
     wakeLock,
-    paused: false,
-    pausedMs: 0,       // total milliseconds spent paused
-    pauseStart: null,  // timestamp when current pause began
+    paused:     false,
+    pausedMs:   0,
+    pauseStart: null,
   };
 
   activeRide.timerInterval = setInterval(() => {
-    if (activeRide.paused) return;
-    document.getElementById('hud-elapsed').textContent = fmtElapsed(activeElapsed());
+    if (!activeRide.paused)
+      document.getElementById('hud-elapsed').textContent = fmtElapsed(activeElapsed());
   }, 1000);
 
   activeRide.watchId = navigator.geolocation.watchPosition(
@@ -220,40 +249,34 @@ async function startRide() {
     err => showToast(`GPS error: ${err.message}`),
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
   );
+
+  showActiveUI();
 }
 
 function onGpsUpdate(pos) {
   if (!activeRide) return;
 
   const { latitude: lat, longitude: lng, speed, accuracy } = pos.coords;
-
   if (accuracy > 50 && activeRide.coordinates.length === 0) return;
 
   const point = { lat, lng, timestamp: pos.timestamp, speed: speed ?? 0 };
   activeRide.coordinates.push(point);
 
-  // HUD
   document.getElementById('hud-speed').textContent    = Math.round(mpsToMph(speed ?? 0));
   document.getElementById('hud-distance').textContent = metersToMiles(totalDistance(activeRide.coordinates)).toFixed(1);
 
-  // Map
-  activeRide.map.setView([lat, lng]);
+  map.setView([lat, lng]);
   activeRide.polyline.addLatLng([lat, lng]);
 
-  // Incremental persist
   dbPut({
     id: activeRide.id, startTime: activeRide.startTime,
     endTime: null, coordinates: activeRide.coordinates, stats: null,
   });
 }
 
-function activeElapsed() {
-  return (Date.now() - activeRide.startTime) - activeRide.pausedMs;
-}
-
 function pauseRide() {
   if (!activeRide || activeRide.paused) return;
-  activeRide.paused = true;
+  activeRide.paused     = true;
   activeRide.pauseStart = Date.now();
   navigator.geolocation.clearWatch(activeRide.watchId);
   activeRide.watchId = null;
@@ -264,10 +287,10 @@ function pauseRide() {
 
 function resumeRide() {
   if (!activeRide || !activeRide.paused) return;
-  activeRide.pausedMs += Date.now() - activeRide.pauseStart;
+  activeRide.pausedMs  += Date.now() - activeRide.pauseStart;
   activeRide.pauseStart = null;
-  activeRide.paused = false;
-  activeRide.watchId = navigator.geolocation.watchPosition(
+  activeRide.paused     = false;
+  activeRide.watchId    = navigator.geolocation.watchPosition(
     onGpsUpdate,
     err => showToast(`GPS error: ${err.message}`),
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -282,9 +305,8 @@ async function endRide() {
   navigator.geolocation.clearWatch(activeRide.watchId);
   clearInterval(activeRide.timerInterval);
   try { await activeRide.wakeLock?.release(); } catch { /* non-fatal */ }
-  activeRide.map.remove();
 
-  const endTime = Date.now();
+  const endTime     = Date.now();
   const rideElapsed = activeElapsed();
   const ride = {
     id: activeRide.id, startTime: activeRide.startTime,
@@ -294,18 +316,21 @@ async function endRide() {
   await dbPut(ride);
 
   const savedId = activeRide.id;
-  activeRide = null;
 
+  // Reset HUD
   document.getElementById('hud-speed').textContent    = '0';
   document.getElementById('hud-elapsed').textContent  = '00:00';
   document.getElementById('hud-distance').textContent = '0.0';
   document.getElementById('btn-pause-ride').textContent = 'Pause';
   document.getElementById('btn-pause-ride').setAttribute('aria-label', 'Pause current ride');
-  document.getElementById('search-input').value = '';
-  document.getElementById('search-results').innerHTML = '';
-  closeSearchDrawer();
-  if (searchPin) { searchPin = null; }
 
+  // Clean up search pin and ride polyline from main map
+  if (searchPin) { searchPin.remove(); searchPin = null; }
+  activeRide.polyline.remove();
+  activeRide = null;
+
+  closeSearchDrawer();
+  showHomeUI();
   openDetail(savedId);
 }
 
@@ -313,13 +338,12 @@ async function endRide() {
 
 async function openDetail(id) {
   const ride = await dbGet(id);
-  if (!ride) { showToast('Ride not found.'); renderHome(); return; }
+  if (!ride) { showToast('Ride not found.'); return; }
 
   detailRideId = id;
-  showScreen('screen-detail');
+  document.getElementById('screen-detail').hidden = false;
 
   document.getElementById('detail-title').textContent = fmtDate(ride.startTime);
-
   const stats = ride.stats ?? computeStats(ride);
   document.getElementById('stat-distance').textContent  = `${stats.distance.toFixed(2)} mi`;
   document.getElementById('stat-duration').textContent  = fmtElapsed(stats.duration);
@@ -334,42 +358,40 @@ async function openDetail(id) {
     ? [coords[Math.floor(coords.length / 2)].lat, coords[Math.floor(coords.length / 2)].lng]
     : [0, 0];
 
-  detailMap = makeMap('map-detail', center, 13);
+  detailMap = L.map('map-detail', { zoomControl: false, attributionControl: true }).setView(center, 13);
+  L.tileLayer(TILE_URL, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(detailMap);
+  setTimeout(() => detailMap.invalidateSize(), 50);
 
   if (hasTrack) {
     const latlngs = coords.map(c => [c.lat, c.lng]);
     L.polyline(latlngs, { color: TRACK_COLOR, weight: TRACK_WIDTH }).addTo(detailMap);
-
-    // Fit to track
     detailMap.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 16 });
-
-    // Start / end markers
-    L.circleMarker(latlngs[0], { radius: 8, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 1 }).addTo(detailMap);
-    L.circleMarker(latlngs[latlngs.length - 1], { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 1 }).addTo(detailMap);
+    L.circleMarker(latlngs[0],                    { radius: 8, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 1 }).addTo(detailMap);
+    L.circleMarker(latlngs[latlngs.length - 1],   { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 1 }).addTo(detailMap);
   }
+}
+
+function closeDetail() {
+  document.getElementById('screen-detail').hidden = true;
+  if (detailMap) { detailMap.remove(); detailMap = null; }
+  detailRideId = null;
 }
 
 async function deleteRide() {
   if (detailRideId == null) return;
   await dbDelete(detailRideId);
-  detailRideId = null;
-  if (detailMap) { detailMap.remove(); detailMap = null; }
-  renderHome();
+  closeDetail();
 }
 
 /* ─── Search ─────────────────────────────────────────────────────────────── */
 
 function openSearchDrawer() {
-  const drawer = document.getElementById('search-drawer');
-  drawer.classList.add('open');
-  drawer.setAttribute('aria-hidden', 'false');
+  openDrawer('search-drawer');
   setTimeout(() => document.getElementById('search-input').focus(), 300);
 }
 
 function closeSearchDrawer() {
-  const drawer = document.getElementById('search-drawer');
-  drawer.classList.remove('open');
-  drawer.setAttribute('aria-hidden', 'true');
+  closeAllDrawers();
   document.getElementById('search-input').blur();
 }
 
@@ -380,10 +402,9 @@ async function runSearch() {
 
   if (!query) return;
 
-  results.innerHTML = '';
-  empty.hidden = true;
-  empty.textContent = 'Searching…';
-  empty.hidden = false;
+  results.innerHTML    = '';
+  empty.textContent    = 'Searching…';
+  empty.hidden         = false;
 
   const last = activeRide?.coordinates[activeRide.coordinates.length - 1];
   const ll   = last ? `${last.lat},${last.lng}` : '';
@@ -402,7 +423,6 @@ async function runSearch() {
   }
 
   const places = data.results ?? [];
-  empty.hidden = places.length > 0;
   if (places.length === 0) { empty.textContent = 'No results found.'; return; }
   empty.hidden = true;
 
@@ -411,14 +431,12 @@ async function runSearch() {
     li.className = 'search-result-item';
     li.setAttribute('role', 'button');
     li.setAttribute('tabindex', '0');
-
     const address = place.location?.formatted_address ?? '';
     const dist    = place.distance ? `${(place.distance * 0.000621371).toFixed(1)} mi away` : '';
     li.innerHTML = `
       <span class="search-result-name">${place.name}</span>
       <span class="search-result-meta">${[address, dist].filter(Boolean).join(' · ')}</span>
     `;
-
     const select = () => selectSearchResult(place);
     li.addEventListener('click', select);
     li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') select(); });
@@ -428,23 +446,22 @@ async function runSearch() {
 
 function selectSearchResult(place) {
   const { latitude: lat, longitude: lng } = place;
-  if (!lat || !lng || !activeRide) return;
+  if (!lat || !lng) return;
 
-  // Remove previous search pin
   if (searchPin) { searchPin.remove(); searchPin = null; }
 
   searchPin = L.marker([lat, lng], {
     icon: L.divIcon({
-      className: '',
-      html: `<div class="search-pin"></div>`,
+      className:  '',
+      html:       `<div class="search-pin"></div>`,
       iconSize:   [20, 20],
       iconAnchor: [10, 10],
     })
-  }).addTo(activeRide.map);
+  }).addTo(map);
 
   searchPin.bindPopup(`<strong>${place.name}</strong><br>${place.location?.formatted_address ?? ''}`).openPopup();
-  activeRide.map.setView([lat, lng], 15);
-  closeSearchDrawer();
+  map.setView([lat, lng], 15);
+  closeAllDrawers();
 }
 
 /* ─── Event listeners ────────────────────────────────────────────────────── */
@@ -454,22 +471,32 @@ document.getElementById('btn-end-ride').addEventListener('click',   endRide);
 document.getElementById('btn-pause-ride').addEventListener('click', () => {
   if (activeRide?.paused) resumeRide(); else pauseRide();
 });
-document.getElementById('btn-recenter').addEventListener('click', () => {
-  if (!activeRide || activeRide.coordinates.length === 0) return;
-  const last = activeRide.coordinates[activeRide.coordinates.length - 1];
-  activeRide.map.setView([last.lat, last.lng]);
-});
 
+document.getElementById('btn-open-past-rides').addEventListener('click', openPastRides);
+document.getElementById('btn-close-past-rides').addEventListener('click', closeAllDrawers);
+
+document.getElementById('btn-open-search').addEventListener('click', openSearchDrawer);
 document.getElementById('btn-search-open').addEventListener('click', openSearchDrawer);
-document.getElementById('btn-search-close').addEventListener('click', closeSearchDrawer);
+document.getElementById('btn-search-close').addEventListener('click', closeAllDrawers);
 document.getElementById('btn-search-submit').addEventListener('click', runSearch);
 document.getElementById('search-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') runSearch();
 });
-document.getElementById('btn-back').addEventListener('click', () => {
-  if (detailMap) { detailMap.remove(); detailMap = null; }
-  renderHome();
+
+document.getElementById('btn-recenter').addEventListener('click', () => {
+  if (activeRide?.coordinates.length) {
+    const last = activeRide.coordinates[activeRide.coordinates.length - 1];
+    map.setView([last.lat, last.lng]);
+  } else {
+    navigator.geolocation.getCurrentPosition(
+      pos => map.setView([pos.coords.latitude, pos.coords.longitude], 14),
+      () => showToast('Location unavailable'),
+      { enableHighAccuracy: false, timeout: 5000 }
+    );
+  }
 });
+
+document.getElementById('btn-back').addEventListener('click', closeDetail);
 document.getElementById('btn-delete-ride').addEventListener('click', async () => {
   if (confirm('Delete this ride? This cannot be undone.')) await deleteRide();
 });
@@ -485,7 +512,7 @@ document.addEventListener('visibilitychange', async () => {
 
 (async () => {
   db = await openDB();
-  await renderHome();
+  initMap();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => { /* non-fatal */ });
   }
