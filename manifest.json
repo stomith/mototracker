@@ -2,7 +2,7 @@
   "name": "MotoTracker",
   "short_name": "MotoTracker",
   "description": "Motorcycle ride tracker with GPS and stats",
-  "start_url": "/",
+  "start_url": "/mototracker/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0a0a0a",
