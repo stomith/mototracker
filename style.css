@@ -191,10 +191,13 @@ button:focus-visible {
 
 /* ─── Map container (shared) ─────────────────────────────────────────────── */
 
+.map-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .map-container {
   width: 100%;
-  flex-shrink: 0;
-  position: relative;
 }
 
 .btn-recenter {
