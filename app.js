@@ -1,5 +1,6 @@
 /* ─── Config ─────────────────────────────────────────────────────────────── */
 
+const WORKER_URL  = 'https://mototracker-worker.stomith.workers.dev';
 const TILE_URL    = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR   = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
 const TRACK_COLOR = '#FF6B00';
@@ -14,6 +15,7 @@ let db           = null;
 let activeRide   = null;  // { id, startTime, coordinates, map, polyline, watchId, timerInterval, wakeLock }
 let detailRideId = null;
 let detailMap    = null;
+let searchPin    = null;  // Leaflet marker for search result
 
 /* ─── IndexedDB ──────────────────────────────────────────────────────────── */
 
@@ -299,6 +301,10 @@ async function endRide() {
   document.getElementById('hud-distance').textContent = '0.0';
   document.getElementById('btn-pause-ride').textContent = 'Pause';
   document.getElementById('btn-pause-ride').setAttribute('aria-label', 'Pause current ride');
+  document.getElementById('search-input').value = '';
+  document.getElementById('search-results').innerHTML = '';
+  closeSearchDrawer();
+  if (searchPin) { searchPin = null; }
 
   openDetail(savedId);
 }
@@ -351,6 +357,96 @@ async function deleteRide() {
   renderHome();
 }
 
+/* ─── Search ─────────────────────────────────────────────────────────────── */
+
+function openSearchDrawer() {
+  const drawer = document.getElementById('search-drawer');
+  drawer.classList.add('open');
+  drawer.setAttribute('aria-hidden', 'false');
+  setTimeout(() => document.getElementById('search-input').focus(), 300);
+}
+
+function closeSearchDrawer() {
+  const drawer = document.getElementById('search-drawer');
+  drawer.classList.remove('open');
+  drawer.setAttribute('aria-hidden', 'true');
+  document.getElementById('search-input').blur();
+}
+
+async function runSearch() {
+  const query   = document.getElementById('search-input').value.trim();
+  const results = document.getElementById('search-results');
+  const empty   = document.getElementById('search-empty');
+
+  if (!query) return;
+
+  results.innerHTML = '';
+  empty.hidden = true;
+  empty.textContent = 'Searching…';
+  empty.hidden = false;
+
+  const last = activeRide?.coordinates[activeRide.coordinates.length - 1];
+  const ll   = last ? `${last.lat},${last.lng}` : '';
+
+  let data;
+  try {
+    const url = new URL(`${WORKER_URL}/search`);
+    url.searchParams.set('q', query);
+    url.searchParams.set('limit', '8');
+    if (ll) url.searchParams.set('ll', ll);
+    const res = await fetch(url.toString());
+    data = await res.json();
+  } catch {
+    empty.textContent = 'Search failed. Check connection.';
+    return;
+  }
+
+  const places = data.results ?? [];
+  empty.hidden = places.length > 0;
+  if (places.length === 0) { empty.textContent = 'No results found.'; return; }
+  empty.hidden = true;
+
+  places.forEach(place => {
+    const li = document.createElement('li');
+    li.className = 'search-result-item';
+    li.setAttribute('role', 'button');
+    li.setAttribute('tabindex', '0');
+
+    const address = place.location?.formatted_address ?? '';
+    const dist    = place.distance ? `${(place.distance * 0.000621371).toFixed(1)} mi away` : '';
+    li.innerHTML = `
+      <span class="search-result-name">${place.name}</span>
+      <span class="search-result-meta">${[address, dist].filter(Boolean).join(' · ')}</span>
+    `;
+
+    const select = () => selectSearchResult(place);
+    li.addEventListener('click', select);
+    li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') select(); });
+    results.appendChild(li);
+  });
+}
+
+function selectSearchResult(place) {
+  const { latitude: lat, longitude: lng } = place;
+  if (!lat || !lng || !activeRide) return;
+
+  // Remove previous search pin
+  if (searchPin) { searchPin.remove(); searchPin = null; }
+
+  searchPin = L.marker([lat, lng], {
+    icon: L.divIcon({
+      className: '',
+      html: `<div class="search-pin"></div>`,
+      iconSize:   [20, 20],
+      iconAnchor: [10, 10],
+    })
+  }).addTo(activeRide.map);
+
+  searchPin.bindPopup(`<strong>${place.name}</strong><br>${place.location?.formatted_address ?? ''}`).openPopup();
+  activeRide.map.setView([lat, lng], 15);
+  closeSearchDrawer();
+}
+
 /* ─── Event listeners ────────────────────────────────────────────────────── */
 
 document.getElementById('btn-start-ride').addEventListener('click', startRide);
@@ -362,6 +458,13 @@ document.getElementById('btn-recenter').addEventListener('click', () => {
   if (!activeRide || activeRide.coordinates.length === 0) return;
   const last = activeRide.coordinates[activeRide.coordinates.length - 1];
   activeRide.map.setView([last.lat, last.lng]);
+});
+
+document.getElementById('btn-search-open').addEventListener('click', openSearchDrawer);
+document.getElementById('btn-search-close').addEventListener('click', closeSearchDrawer);
+document.getElementById('btn-search-submit').addEventListener('click', runSearch);
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runSearch();
 });
 document.getElementById('btn-back').addEventListener('click', () => {
   if (detailMap) { detailMap.remove(); detailMap = null; }

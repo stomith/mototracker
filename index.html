@@ -48,7 +48,25 @@
           <line x1="19" y1="12" x2="22" y2="12"/>
         </svg>
       </button>
+      <button id="btn-search-open" class="btn-map-action btn-search-open" aria-label="Search for places">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </button>
     </div>
+
+  <!-- ── SEARCH DRAWER ── -->
+  <div id="search-drawer" class="search-drawer" aria-hidden="true">
+    <div class="search-drawer-handle"></div>
+    <div class="search-input-row">
+      <input id="search-input" class="search-input" type="search" placeholder="Search places nearby…" autocomplete="off" enterkeyhint="search" />
+      <button id="btn-search-submit" class="btn-search-submit" aria-label="Submit search">Go</button>
+      <button id="btn-search-close" class="btn-search-close" aria-label="Close search">✕</button>
+    </div>
+    <ul id="search-results" class="search-results" role="list"></ul>
+    <p id="search-empty" class="search-empty" hidden></p>
+  </div>
 
     <div class="hud">
       <div class="hud-stat">
