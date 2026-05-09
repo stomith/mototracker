@@ -128,7 +128,7 @@ function totalDistance(coords) {
 
 function computeStats(ride) {
   const coords   = ride.coordinates;
-  const duration = ride.endTime - ride.startTime;
+  const duration = ride._elapsedMs ?? (ride.endTime - ride.startTime);
   const distM    = totalDistance(coords);
   const speeds   = coords.map(c => c.speed ?? 0).filter(s => s >= 0);
   const topMph   = speeds.length ? mpsToMph(Math.max(...speeds)) : 0;
@@ -203,10 +203,14 @@ async function startRide() {
     watchId: null,
     timerInterval: null,
     wakeLock,
+    paused: false,
+    pausedMs: 0,       // total milliseconds spent paused
+    pauseStart: null,  // timestamp when current pause began
   };
 
   activeRide.timerInterval = setInterval(() => {
-    document.getElementById('hud-elapsed').textContent = fmtElapsed(Date.now() - activeRide.startTime);
+    if (activeRide.paused) return;
+    document.getElementById('hud-elapsed').textContent = fmtElapsed(activeElapsed());
   }, 1000);
 
   activeRide.watchId = navigator.geolocation.watchPosition(
@@ -241,6 +245,35 @@ function onGpsUpdate(pos) {
   });
 }
 
+function activeElapsed() {
+  return (Date.now() - activeRide.startTime) - activeRide.pausedMs;
+}
+
+function pauseRide() {
+  if (!activeRide || activeRide.paused) return;
+  activeRide.paused = true;
+  activeRide.pauseStart = Date.now();
+  navigator.geolocation.clearWatch(activeRide.watchId);
+  activeRide.watchId = null;
+  document.getElementById('hud-speed').textContent = '0';
+  document.getElementById('btn-pause-ride').textContent = 'Resume';
+  document.getElementById('btn-pause-ride').setAttribute('aria-label', 'Resume current ride');
+}
+
+function resumeRide() {
+  if (!activeRide || !activeRide.paused) return;
+  activeRide.pausedMs += Date.now() - activeRide.pauseStart;
+  activeRide.pauseStart = null;
+  activeRide.paused = false;
+  activeRide.watchId = navigator.geolocation.watchPosition(
+    onGpsUpdate,
+    err => showToast(`GPS error: ${err.message}`),
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+  document.getElementById('btn-pause-ride').textContent = 'Pause';
+  document.getElementById('btn-pause-ride').setAttribute('aria-label', 'Pause current ride');
+}
+
 async function endRide() {
   if (!activeRide) return;
 
@@ -250,11 +283,12 @@ async function endRide() {
   activeRide.map.remove();
 
   const endTime = Date.now();
+  const rideElapsed = activeElapsed();
   const ride = {
     id: activeRide.id, startTime: activeRide.startTime,
     endTime, coordinates: activeRide.coordinates, stats: null,
   };
-  ride.stats = computeStats(ride);
+  ride.stats = computeStats({ ...ride, _elapsedMs: rideElapsed });
   await dbPut(ride);
 
   const savedId = activeRide.id;
@@ -263,6 +297,8 @@ async function endRide() {
   document.getElementById('hud-speed').textContent    = '0';
   document.getElementById('hud-elapsed').textContent  = '00:00';
   document.getElementById('hud-distance').textContent = '0.0';
+  document.getElementById('btn-pause-ride').textContent = 'Pause';
+  document.getElementById('btn-pause-ride').setAttribute('aria-label', 'Pause current ride');
 
   openDetail(savedId);
 }
@@ -319,6 +355,9 @@ async function deleteRide() {
 
 document.getElementById('btn-start-ride').addEventListener('click', startRide);
 document.getElementById('btn-end-ride').addEventListener('click',   endRide);
+document.getElementById('btn-pause-ride').addEventListener('click', () => {
+  if (activeRide?.paused) resumeRide(); else pauseRide();
+});
 document.getElementById('btn-recenter').addEventListener('click', () => {
   if (!activeRide || activeRide.coordinates.length === 0) return;
   const last = activeRide.coordinates[activeRide.coordinates.length - 1];
