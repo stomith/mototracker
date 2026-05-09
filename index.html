@@ -36,7 +36,15 @@
 
   <!-- ── ACTIVE RIDE SCREEN ── -->
   <section id="screen-active" class="screen" aria-live="polite">
-    <div id="map-active" class="map-container" aria-label="Live ride map" role="img"></div>
+    <div id="map-active" class="map-container" aria-label="Live ride map" role="img">
+      <button id="btn-recenter" class="btn-recenter" aria-label="Re-center map on my location">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+          <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/>
+        </svg>
+      </button>
+    </div>
 
     <div class="hud">
       <div class="hud-stat">

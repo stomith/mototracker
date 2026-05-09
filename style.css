@@ -194,6 +194,29 @@ button:focus-visible {
 .map-container {
   width: 100%;
   flex-shrink: 0;
+  position: relative;
+}
+
+.btn-recenter {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 1000;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+}
+
+.btn-recenter:active {
+  background: var(--surface-2);
+  color: var(--accent);
 }
 
 #screen-active .map-container {

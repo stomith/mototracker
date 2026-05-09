@@ -319,6 +319,11 @@ async function deleteRide() {
 
 document.getElementById('btn-start-ride').addEventListener('click', startRide);
 document.getElementById('btn-end-ride').addEventListener('click',   endRide);
+document.getElementById('btn-recenter').addEventListener('click', () => {
+  if (!activeRide || activeRide.coordinates.length === 0) return;
+  const last = activeRide.coordinates[activeRide.coordinates.length - 1];
+  activeRide.map.setView([last.lat, last.lng]);
+});
 document.getElementById('btn-back').addEventListener('click', () => {
   if (detailMap) { detailMap.remove(); detailMap = null; }
   renderHome();
